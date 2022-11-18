@@ -3,7 +3,7 @@ faceDir = function(dir)
   if dir < 0 then dir = dir + 4
   while me.facing != dir
     me.left
-    wait(0.1)
+    yield
   end while
 end function
 
@@ -31,7 +31,7 @@ refillWater = function(startX,startY,startFace)
   goTo 71,27
   faceDir 2
   me.select "Watering Can"
-  wait(0.1)
+  yield
   me.useTool
   goTo startX, startY
   faceDir startFace
@@ -46,12 +46,7 @@ tendAhead = function
     end if
     if info != null and info.passable then
       if info.type == "Grass" then
-        while info.type == "Grass"
-          me.select "Scythe"
-          me.useTool
-          info = me.ahead
-          if info == null then break
-        end while
+        me.clearAhead
       end if
     end if
   end if // yes, this is looking worse :D
