@@ -303,7 +303,7 @@ handleKey = function(k, fakeControl=false)
 	isArrowKey = false
 	if kcode >= 17 and kcode <= 20 then
 		keys = ["left", "right", "up", "down"]
-		if key.pressed(key[kcode-17]) then isArrowKey = true
+		if key.pressed(keys[kcode-17]) then isArrowKey = true
 	end if
 	
 	if anyCtrl and not isArrowKey then
