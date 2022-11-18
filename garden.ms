@@ -47,6 +47,7 @@ tendAhead = function
     if info != null and info.passable then
       if info.type == "Grass" then
         me.clearAhead
+        info = me.ahead
       end if
     end if
   end if // yes, this is looking worse :D
