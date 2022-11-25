@@ -1,6 +1,8 @@
 // This is the Farmtronic text editor.  It is imported and invoked
 // via the `edit` command defined in /sys/startup.ms.
 
+import "stringUtil" // needed for automatic indent
+
 data = [""]
 scrollY = 0
 scrollX = 0
@@ -311,7 +313,9 @@ handleKey = function(k, fakeControl=false)
 	else if kcode == 17 then  // left
 		keyPress = ""
 		outer.cursorX = cursorX - 1
-		if cursorX < 0 and cursorY > 0 then
+		curYInCo = prepareLine(outer.data[cursorY])[0]
+		// case left: if in front of indent, go to previous line end
+		if cursorX < curYInCo and cursorY > 0 then
 			outer.cursorY = cursorY - 1
 			outer.cursorX = lineLen(cursorY)
 		end if
@@ -321,8 +325,10 @@ handleKey = function(k, fakeControl=false)
 		keyPress = ""
 		outer.cursorX = cursorX + 1
 		if cursorX > lineLen(cursorY) and cursorY < data.len then
+			curYInCo = prepareLine(outer.data[cursorY+1])[0] 
+			// case right: if next line has indent, move cursor to end of indent in next line
 			outer.cursorY = cursorY + 1
-			outer.cursorX = 0
+			outer.cursorX = curYInCo
 		end if
 		if byWord then nextWord 1
 		outer.idealCursorX = cursorX
@@ -360,11 +366,17 @@ handleKey = function(k, fakeControl=false)
 				outer.cursorX = cursorX +1
 			end for
 		end if
+		automaticIndent
 		refreshDisplay
 	else if kcode == 127 then  // forward-delete
 		keyPress = ""
 		if cursorX >= data[cursorY].len then
-			if cursorY < data.len-1 then
+			cuY1InCo = prepareLine(data[cursorY +1])[0]
+			if cuY1InCo > 0 then
+				data[cursorY] = data[cursorY] + data[cursorY+1][cuY1InCo:]
+				data.remove cursorY + 1
+				refreshDisplay
+			else if cursorY < data.len-1 then
 				data[cursorY] = data[cursorY] + data[cursorY+1]
 				data.remove cursorY + 1
 				refreshDisplay
@@ -379,16 +391,29 @@ handleKey = function(k, fakeControl=false)
 		end if
 	else if kcode == 8 then  // backspace
 		keyPress = ""
+		doBS = true
 		if cursorX > 0 then
-			endPos = cursorX
-			if data[cursorY][cursorX - 2] == " " and data[cursorY][cursorX - 1] == " " then 
-				outer.cursorX = cursorX - 2 
+			endPosX = cursorX
+			endPosY = cursorY
+			if outer.cursorX == (prepareLine(outer.data[outer.cursorY])[0]) then
+				cu1YLen = data[cursorY - 1].len
+				cuYInCo = prepareLine(outer.data[outer.cursorY])[0]
+				data[cursorY - 1] = data[cursorY - 1][:cu1YLen] + data[cursorY][cuYInCo:]
+				data.remove cursorY
+				outer.cursorY = cursorY - 1
+				outer.cursorX = cu1YLen
+				doBS = false
+			else if outer.data[cursorY][cursorX - 2] == " " and data[cursorY][cursorX - 1] == " " then 
+				outer.cursorX = cursorX - 2
 			else 
 				outer.cursorX = cursorX - 1
 			end if
 			if byWord then nextWord -1
-			data[cursorY] = data[cursorY][:cursorX] + data[cursorY][endPos:]
-			refreshLine cursorY
+			if doBS then
+				data[cursorY] = data[cursorY][:cursorX] + data[cursorY][endPosX:]
+			end if
+			automaticIndent
+			refreshDisplay
 		else if cursorY > 0 then
 			x = data[cursorY-1].len
 			if cursorY < data.len then
@@ -397,6 +422,7 @@ handleKey = function(k, fakeControl=false)
 			end if
 			outer.cursorY = cursorY - 1
 			outer.cursorX = x
+			automaticIndent
 			refreshDisplay
 		end if
 	else if kcode == 27 then  // Escape
@@ -411,6 +437,7 @@ handleKey = function(k, fakeControl=false)
 			data[cursorY] = data[cursorY][:cursorX] + k + data[cursorY][cursorX:]
 		end if
 		if kcode == 9 then outer.cursorX = cursorX + 2 else outer.cursorX = cursorX + 1
+		automaticIndent
 		refreshLine cursorY
 	end if
 
@@ -439,6 +466,7 @@ update = function()
 		while key.pressed("page down"); yield; end while
 		handleKey "D", true	
 	end if
+	realignCursor cursorY cursorX // will move cursor at the end of indent
 end function
 
 // editText: main entry point.
@@ -476,6 +504,187 @@ editText = function(textToEdit)
 	text.row = 1
 end function
 
+// Upcoming Code is for automatic Indent on lines,
+// Written by GitHub:Hedrauta // Discord:H3draut3r#6722
+
+// Short explanation: 
+// "Indent" in the next lines context is meant for 2 spaces
+
+// realignCursor: used in @@update: will move cursor at the end of the indent, 
+// if moved up or down into a indent (left/right acts differently) 
+realignCursor = function(curY, curX)
+	curYInCo = prepareLine(outer.data[curY])[0]
+	if curX < curYInCo then
+		outer.cursorX = curYInCo
+	end if
+end function
+
+// prepareLine: Used for upcomming functions to "prepare" the content,
+// + counting the "starting spaces" and returns both, spaces-count + 
+// the line with removed spaces from start and end.
+// Makes is easier to detect '.endsWith("then")' or 'else'
+prepareLine = function(uList)
+    // for whole line preparing, 
+    // returns list with list of line, + counter
+    prepList = uList // copy content, keep old untouched
+		if prepList.hasIndex("//") then // does line contain a comment?
+			prepList = prepList[:prepList.indexOf("//")] // keep everything except the comment
+		end if
+		pList = prepList.split("")
+    pCount = 0
+		if pList != null then
+			if pList.len > 0 then // remove space from start, and count occurences
+					while pList[0] == " "
+							pList.remove(0)
+							pCount = pCount + 1
+							if pList.len == 0 then break // break if content gets "null"
+					end while
+			end if
+			if pList.len > 0 then
+				if pList.len > 4 then // keyword "else" or other possible,
+						// remove spaces at the end, no count
+						while pList[pList.len - 1] == " "
+								pList.remove(pList.len - 1) 
+						end while
+				end if
+			end if
+		end if
+    return [pCount, pList.join("")]
+end function
+
+// adjustNextLinesIndent: Used for upcomming functions to 'adjust' "Indent" for every next line
+// seriously, the name is probably obvious
+adjustNextLinesIndent = function(startingLine)
+	dataLen = outer.data.len - 1 // get count of lines (-1 for "index")
+	startingIndent = 0
+	if outer.data[startingLine] != null then
+		startingIndent = prepareLine(outer.data[startingLine])[0]
+	end if
+	if startingLine < dataLen then
+		for editLine in range(startingLine + 1, dataLen)
+			splODeL = outer.data[editLine].split("")
+			ANLInCount = prepareLine(outer.data[editLine])[0]
+			if ANLInCount < startingIndent + 2 then
+				while ANLInCount < startingIndent + 2
+					splODeL.insert(0," ")
+					ANLInCount = ANLInCount + 1
+					if outer.cursorY == editLine then outer.cursorX = outer.cursorX + 1
+				end while
+			else if ANLInCount > startingIndent + 2 then
+				while ANLInCount > startingIndent + 2
+					splODeL.remove(0)
+					ANLInCount = ANLInCount - 1
+					if outer.cursorY == editLine then outer.cursorX = outer.cursorX - 1
+				end while
+			end if
+			outer.data[editLine] = splODeL.join("")
+			refreshLine editLine
+		end for
+	end if
+end function
+
+// removeNextLinesIndent: In case of "end if/for/while/function", we have
+// to remove "indents", so the current line will match the corresponding
+// line's indent and every other line will removed one indent
+removeNextLinesIndent = function(startingLine, targetLine, notElse=true)
+	dataLen = outer.data.len - 1
+	startingIndent = 0
+	targetIndent = 0
+	splOuterData = outer.data[targetLine].split("")
+	if startingLine != targetLine then
+		startingIndent = prepareLine(outer.data[startingLine])[0]
+		targetIndent = prepareLine(outer.data[targetLine])[0]
+		if targetIndent > startingIndent then
+			while targetIndent > startingIndent
+				splOuterData.remove(0)
+				targetIndent = prepareLine(splOuterData.join(""))[0]
+				if outer.cursorY == targetLine then outer.cursorX = outer.cursorX - 1
+			end while
+			outer.data[targetLine] = splOuterData.join("")
+			refreshLine targetLine
+		end if
+	end if
+	if targetLine < dataLen and notElse then
+		for editLine in range(targetLine + 1, dataLen)
+			splODeL = outer.data[editLine].split("")
+			while prepareLine(splODeL.join(""))[0] > prepareLine(outer.data[startingLine])[0]
+				splODeL.remove(0)
+				if outer.cursorY == editLine then outer.cursorX = outer.cursorX - 1
+				if splOuterData.len == 0 then break
+			end while
+			outer.data[editLine] = splODeL.join("")
+			refreshLine editLine
+		end for
+	end if
+end function
+
+automaticIndent = function()
+	// prepare empty list of lists, one for each "condition"
+	listConditions = [[],[],[],[]] // order: if,for,while,function
+	if outer.data.len > 1 then // indent works only on 2+ lines
+		for lineNumber in range(0, outer.data.len - 1)
+			lineString = prepareLine(outer.data[lineNumber])[1]
+			if lineString.len > 2 then
+				if lineString.startsWith("else") or lineString.startsWith("else if") then
+					listConLine = listConditions[0][listConditions[0].len - 1]
+					removeNextLinesIndent(listConLine, lineNumber, false)
+				else if lineString.startsWith("if") or lineString.endsWith("if") then
+					if lineString.endsWith("then") or lineString.endsWith("else") then
+						if lineNumber < outer.data.len - 1 then
+							adjustNextLinesIndent(lineNumber)
+							listConditions[0].push(lineNumber)
+						end if
+					else if lineString.contains("end if") then
+						if lineNumber < outer.data.len - 1 then
+							if listConditions[0].hasIndex(lineNumber) then
+								listConInd = listConditions[0].indexOf(lineNumber)
+								removeNextLinesIndent(lineNumber, lineNumber)
+								listConditions[0].remove(listConInd)
+							else
+								listConLine = listConditions[0][listConditions[0].len - 1]
+								listConInd = listConditions[0].indexOf(listConLine)
+								removeNextLinesIndent(listConLine, lineNumber)
+								listConditions[0].remove(listConInd)
+							end if
+						end if
+					end if
+				else if lineString.contains("for") then
+					if lineString.contains("end for") then
+						listConLine = listConditions[1][listConditions[1].len - 1]
+						listConInd = listConditions[1].indexOf(listConLine)
+						removeNextLinesIndent(listConLine, lineNumber)
+						listConditions[1].remove(listConInd)
+					else
+						adjustNextLinesIndent(lineNumber)
+						listConditions[1].push(lineNumber)
+					end if
+				else if lineString.startsWith("while") or lineString.endsWith("while") then
+					if lineString.contains("end while") then
+						listConLine = listConditions[2][listConditions[2].len - 1]
+						listConInd = listConditions[2].indexOf(listConLine)
+						removeNextLinesIndent(listConLine, lineNumber)
+						listConditions[2].remove(listConInd)
+					else
+						adjustNextLinesIndent(lineNumber)
+						listConditions[2].push(lineNumber)
+					end if
+				else if lineString.contains("function") then
+					if lineString.contains("end function") then
+						listConLine = listConditions[3][listConditions[3].len - 1]
+						listConInd = listConditions[3].indexOf(listConLine)
+						removeNextLinesIndent(listConLine, lineNumber)
+						listConditions[3].remove(listConInd)
+					else
+						adjustNextLinesIndent(lineNumber)
+						listConditions[3].push(lineNumber)
+					end if
+				end if
+			end if
+		end for
+	end if
+end function
+
+// Back to game-Code
 if locals == globals then
 	editText _source
 end if
