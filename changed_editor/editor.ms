@@ -466,7 +466,7 @@ update = function()
 		while key.pressed("page down"); yield; end while
 		handleKey "D", true	
 	end if
-	realignCursor cursorY cursorX // will move cursor at the end of indent
+	realignCursor(outer.cursorY, outer.cursorX) // will move cursor at the end of indent
 end function
 
 // editText: main entry point.
