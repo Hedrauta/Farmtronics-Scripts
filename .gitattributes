@@ -1,3 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-*.ms linguist-language=MiniScript
+*.minidisk linguist-language="Pure Data"
+*.ms linguist-language=Miniscript text=lua
+changed_editor/** linguist-vendored
