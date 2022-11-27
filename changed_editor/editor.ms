@@ -620,63 +620,54 @@ end function
 
 automaticIndent = function()
 	// prepare empty list of lists, one for each "condition"
-	listConditions = [[],[],[],[]] // order: if,for,while,function
+	mapCond = {"ifLines":[], "forLines":[], "whileLines":[], "functionLines":[]}
 	if outer.data.len > 1 then // indent works only on 2+ lines
 		for lineNumber in range(0, outer.data.len - 1)
 			lineString = prepareLine(outer.data[lineNumber])[1]
 			if lineString.len > 2 then
 				if lineString.startsWith("else") or lineString.startsWith("else if") then
-					listConLine = listConditions[0][listConditions[0].len - 1]
+					listConLine = mapCond.ifLines[mapCond.ifLines.len - 1]
 					removeNextLinesIndent(listConLine, lineNumber, false)
 				else if lineString.startsWith("if") or lineString.endsWith("if") then
 					if lineString.endsWith("then") or lineString.endsWith("else") then
 						if lineNumber < outer.data.len - 1 then
 							adjustNextLinesIndent(lineNumber)
-							listConditions[0].push(lineNumber)
+							mapCond.ifLines.push(lineNumber)
 						end if
 					else if lineString.contains("end if") then
 						if lineNumber < outer.data.len - 1 then
-							if listConditions[0].hasIndex(lineNumber) then
-								listConInd = listConditions[0].indexOf(lineNumber)
+							if mapCond.ifLines.hasIndex(lineNumber) then
+								listConLine = mapCond.ifLines.pop
 								removeNextLinesIndent(lineNumber, lineNumber)
-								listConditions[0].remove(listConInd)
 							else
-								listConLine = listConditions[0][listConditions[0].len - 1]
-								listConInd = listConditions[0].indexOf(listConLine)
+								listConLine = mapCond.ifLines.pop
 								removeNextLinesIndent(listConLine, lineNumber)
-								listConditions[0].remove(listConInd)
 							end if
 						end if
 					end if
 				else if lineString.contains("for") then
 					if lineString.contains("end for") then
-						listConLine = listConditions[1][listConditions[1].len - 1]
-						listConInd = listConditions[1].indexOf(listConLine)
+						listConLine = mapCond.forLines
 						removeNextLinesIndent(listConLine, lineNumber)
-						listConditions[1].remove(listConInd)
 					else
 						adjustNextLinesIndent(lineNumber)
-						listConditions[1].push(lineNumber)
+						mapCond.forLines.push(lineNumber)
 					end if
 				else if lineString.startsWith("while") or lineString.endsWith("while") then
 					if lineString.contains("end while") then
-						listConLine = listConditions[2][listConditions[2].len - 1]
-						listConInd = listConditions[2].indexOf(listConLine)
+						listConLine = mapCond.whileLines.pop
 						removeNextLinesIndent(listConLine, lineNumber)
-						listConditions[2].remove(listConInd)
 					else
 						adjustNextLinesIndent(lineNumber)
-						listConditions[2].push(lineNumber)
+						mapCond.whileLines.push(lineNumber)
 					end if
 				else if lineString.contains("function") then
 					if lineString.contains("end function") then
-						listConLine = listConditions[3][listConditions[3].len - 1]
-						listConInd = listConditions[3].indexOf(listConLine)
+						listConLine = mapCond.functionLines.pop
 						removeNextLinesIndent(listConLine, lineNumber)
-						listConditions[3].remove(listConInd)
 					else
 						adjustNextLinesIndent(lineNumber)
-						listConditions[3].push(lineNumber)
+						mapCond.functionLines.push(lineNumber)
 					end if
 				end if
 			end if
